@@ -6,7 +6,7 @@ on:
       account:
         description: 'Number of Accounts to be generated (default = 0)'
         required: false
-        default: '0'
+        default: '5'
       key:
         description: 'Number of Keys to be generated (default = 1)'
         required: false
