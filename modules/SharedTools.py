@@ -1,6 +1,7 @@
 from selenium.webdriver import Chrome, ChromeOptions, ChromeService
 from selenium.webdriver import Firefox, FirefoxOptions, FirefoxService
 from selenium.webdriver import Edge, EdgeOptions, EdgeService
+from selenium.webdriver import Safari, SafariOptions, SafariService
 
 import subprocess
 import traceback
@@ -85,7 +86,7 @@ def console_log(text='', logger_type=None, fill_text=None, silent_mode=False):
     else:
         print(text)
 
-from .WebDriverInstaller import GOOGLE_CHROME, MICROSOFT_EDGE, MOZILLA_FIREFOX
+from .WebDriverInstaller import GOOGLE_CHROME, MICROSOFT_EDGE, MOZILLA_FIREFOX, APPLE_SAFARI
 
 def clear_console():
     if os.name == 'nt':
@@ -190,7 +191,23 @@ def initSeleniumWebDriver(browser_name: str, webdriver_path = None, browser_path
         if os.name == 'posix': # For Linux
             driver_options.add_argument('--no-sandbox')
             driver_options.add_argument('--disable-dev-shm-usage')
-        driver = Edge(options=driver_options, service=EdgeService(executable_path=webdriver_path))
+        service = EdgeService(executable_path=webdriver_path)
+        if os.name == 'nt' and headless:
+            service.creation_flags = 0x08000000 # CREATE_NO_WINDOW (Process Creation Flags, WinBase.h) -> 'DevTools listening on' is not visible!!!
+        try:
+            driver = Edge(options=driver_options, service=service)
+        except Exception as e:
+            logging.critical("EXC_INFO:", exc_info=True)
+            if traceback.format_exc().find('--user-data-dir') != -1: # Fix for probably user data directory is already in use
+                driver_options.add_argument("--user-data-dir=./edge_tmp")
+                try:
+                    shutil.rmtree("edge_tmp")
+                except:
+                    pass
+                os.makedirs('edge_tmp', exist_ok=True)
+                driver = Edge(options=driver_options, service=EdgeService(executable_path=webdriver_path))
+            else:
+                raise e
     elif browser_name == MOZILLA_FIREFOX:
         driver_options = FirefoxOptions()
         if browser_path.strip() != '':
@@ -201,13 +218,29 @@ def initSeleniumWebDriver(browser_name: str, webdriver_path = None, browser_path
         if os.name == 'posix': # For Linux
             driver_options.add_argument('--no-sandbox')
             driver_options.add_argument("--disable-dev-shm-usage")
+        service = FirefoxService(executable_path=webdriver_path)
+        if os.name == 'nt' and headless:
+            service.creation_flags = 0x08000000 # CREATE_NO_WINDOW (Process Creation Flags, WinBase.h) -> 'DevTools listening on' is not visible!!!
         # Fix for: Your firefox profile cannot be loaded. it may be missing or inaccessible
-        try:
-            os.makedirs('firefox_tmp')
-        except:
-            pass
+        os.makedirs('firefox_tmp', exist_ok=True)
         os.environ['TMPDIR'] = (os.getcwd()+'/firefox_tmp').replace('\\', '/')
-        driver = Firefox(options=driver_options, service=FirefoxService(executable_path=webdriver_path))
+        driver = Firefox(options=driver_options, service=service)
+    elif browser_name == APPLE_SAFARI:
+        driver_options = SafariOptions()
+        try:
+            if os.name == 'nt':
+                console_log('Apple Safari is not supported on Windows!!!', ERROR)
+                return None
+            elif os.name == 'posix' and sys.platform.startswith('linux'):
+                console_log('Apple Safari is not supported on Linux!!!', ERROR)
+                return None
+            driver = Safari(options=driver_options, service=SafariService(executable_path=webdriver_path))
+        except Exception as e:
+            logging.critical("EXC_INFO:", exc_info=True)
+            if traceback.format_exc().find("Allow Remote Automation") != -1:
+                console_log(traceback.format_exc().split('Message: ')[-1].strip(), ERROR)
+            else:
+                raise e
     return driver
 
 def parseToken(email_obj, driver=None, eset_business=False, delay=DEFAULT_DELAY, max_iter=DEFAULT_MAX_ITER):
